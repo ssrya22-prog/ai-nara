@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chat AI</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #1a1a1c;
+    --header: #131315;
+    --panel: #232326;
+    --bubble-user: #2563eb;
+    --bubble-ai: #2a2a2e;
+    --text: #e8e8ea;
+    --text-dim: #9a9aa2;
+    --border: #333338;
+    --accent: #3b82f6;
+  }
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+  }
+
+  header {
+    background: var(--header);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .logo {
+    width: 34px; height: 34px; border-radius: 50%;
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    display: flex; align-items: center; justify-content: center;
+    font-weight: bold; font-size: 16px;
+  }
+  .title-block { display: flex; flex-direction: column; }
+  .title-block .app-name { font-weight: 600; font-size: 15px; }
+  .title-block .model-name { font-size: 12px; color: var(--text-dim); }
+
+  .icon-btn {
+    background: transparent; border: none; color: var(--text);
+    width: 38px; height: 38px; border-radius: 10px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s;
+  }
+  .icon-btn:hover { background: #2c2c30; }
+  .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .icon-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .icon-btn.active { color: #ef4444; }
+
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 14px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    scroll-behavior: smooth;
+  }
+  #chat::-webkit-scrollbar { width: 8px; }
+  #chat::-webkit-scrollbar-thumb { background: #3a3a40; border-radius: 4px; }
+
+  .msg { display: flex; flex-direction: column; max-width: 88%; }
+  .msg.user { align-self: flex-end; align-items: flex-end; }
+  .msg.ai { align-self: flex-start; align-items: flex-start; }
+
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; margin-bottom: 5px;
+  }
+  .msg.user .avatar { background: #1e40af; color: #dbeafe; }
+  .msg.ai .avatar { background: #4b5563; color: #f3f4f6; }
+
+  .bubble {
+    padding: 11px 14px;
+    border-radius: 16px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: anywhere;
+  }
+  .msg.user .bubble {
+    background: var(--bubble-user);
+    color: #fff;
+    border-bottom-right-radius: 5px;
+  }
+  .msg.ai .bubble {
+    background: var(--bubble-ai);
+    color: var(--text);
+    border-bottom-left-radius: 5px;
+  }
+
+  .thought {
+    background: #1e1e22;
+    border: 1px solid #35353b;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    font-size: 12.5px;
+    overflow: hidden;
+    width: 100%;
+  }
+  .thought-head {
+    padding: 7px 11px; cursor: pointer; user-select: none;
+    display: flex; align-items: center; gap: 7px;
+    color: var(--text-dim); font-weight: 500;
+  }
+  .thought-head:hover { background: #26262b; }
+  .thought-head .arrow { transition: transform 0.2s; font-size: 10px; }
+  .thought.open .thought-head .arrow { transform: rotate(90deg); }
+  .thought-body {
+    display: none;
+    padding: 0 11px 9px;
+    color: #b0b0b8; line-height: 1.45;
+    white-space: pre-wrap;
+    font-style: italic;
+    border-top: 1px solid #2e2e34;
+    padding-top: 8px;
+  }
+  .thought.open .thought-body { display: block; }
+
+  .typing { display: inline-flex; gap: 4px; padding: 4px 0; }
+  .typing span {
+    width: 7px; height: 7px; border-radius: 50%; background: #888;
+    animation: blink 1.4s infinite both;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.2s; }
+  .typing span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes blink { 0%,80%,100% { opacity: .2 } 40% { opacity: 1 } }
+
+  #actionBar {
+    display: flex; gap: 6px; justify-content: center;
+    padding: 4px 10px 8px; flex-shrink: 0;
+  }
+  #actionBar .icon-btn { background: var(--panel); }
+
+  #inputBar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px 14px;
+    background: var(--bg);
+    flex-shrink: 0;
+  }
+  #inputBar .round-btn {
+    width: 42px; height: 42px; border-radius: 50%;
+    background: var(--panel); border: none; color: var(--text);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0; transition: background 0.15s;
+  }
+  #inputBar .round-btn:hover { background: #303036; }
+  #inputBar .round-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  #inputBar .round-btn.rec { background: #dc2626; color: #fff; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .6 } }
+
+  #msgInput {
+    flex: 1; background: var(--panel); border: 1px solid var(--border);
+    border-radius: 22px; padding: 11px 16px; color: var(--text);
+    font-size: 15px; outline: none; font-family: inherit;
+    resize: none; max-height: 120px; line-height: 1.4;
+  }
+  #msgInput:focus { border-color: var(--accent); }
+  #sendBtn { background: var(--accent) !important; color: #fff; }
+  #sendBtn:hover { background: #2563eb !important; }
+
+  #settingsOverlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: none; z-index: 50;
+  }
+  #settingsOverlay.show { display: block; }
+  #settingsPanel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 92vw);
+    background: var(--panel); z-index: 51; transform: translateX(100%);
+    transition: transform 0.25s ease; display: flex; flex-direction: column;
+    border-left: 1px solid var(--border);
+  }
+  #settingsPanel.show { transform: translateX(0); }
+  .settings-head {
+    padding: 16px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .settings-head h2 { font-size: 16px; }
+  .settings-body { padding: 16px; overflow-y: auto; flex: 1; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+  .field input, .field textarea, .field select {
+    width: 100%; background: #1a1a1c; border: 1px solid var(--border);
+    border-radius: 8px; padding: 9px 11px; color: var(--text);
+    font-size: 14px; font-family: inherit; outline: none;
+  }
+  .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); }
+  .field textarea { resize: vertical; min-height: 90px; }
+  .field .hint { font-size: 11.5px; color: #6b6b74; margin-top: 5px; }
+  .field .hint a { color: var(--accent); text-decoration: none; }
+  .field .hint a:hover { text-decoration: underline; }
+  .range-row { display: flex; align-items: center; gap: 10px; }
+  .range-row input[type=range] { flex: 1; accent-color: var(--accent); }
+  .range-val { font-size: 13px; color: var(--text); min-width: 30px; text-align: right; }
+  .save-btn {
+    width: 100%; background: var(--accent); color: #fff; border: none;
+    padding: 12px; border-radius: 10px; font-size: 15px; font-weight: 600;
+    cursor: pointer; margin-top: 8px;
+  }
+  .save-btn:hover { background: #2563eb; }
+  .danger-btn {
+    width: 100%; background: transparent; color: #ef4444;
+    border: 1px solid #ef4444; padding: 10px; border-radius: 10px;
+    font-size: 14px; cursor: pointer; margin-top: 10px;
+  }
+  .danger-btn:hover { background: rgba(239,68,68,0.1); }
+
+  @media (max-width: 500px) {
+    .msg { max-width: 94%; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo">AI</div>
+    <div class="title-block">
+      <span class="app-name">Asisten AI</span>
+      <span class="model-name" id="headerModel">Belum diatur</span>
+    </div>
+  </div>
+  <button class="icon-btn" id="settingsBtn" title="Pengaturan">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </button>
+</header>
+
+<div id="chat"></div>
+
+<div id="actionBar">
+  <button class="icon-btn" id="refreshBtn" title="Muat ulang">
+    <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+  </button>
+  <button class="icon-btn" id="regenBtn" title="Regenerate">
+    <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><polyline points="21 3 21 8 16 8"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><polyline points="3 21 3 16 8 16"/></svg>
+  </button>
+  <button class="icon-btn" id="editBtn" title="Edit pesan terakhir">
+    <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+  </button>
+  <button class="icon-btn" id="stopVoiceBtn" title="Stop suara" style="display:none;">
+    <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+  </button>
+</div>
+
+<div id="inputBar">
+  <button class="round-btn" id="plusBtn" title="Lampiran">
+    <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+  </button>
+  <textarea id="msgInput" rows="1" placeholder="Chat casually..."></textarea>
+  <button class="round-btn" id="micBtn" title="Bicara">
+    <svg viewBox="0 0 24 24"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+  </button>
+  <button class="round-btn" id="sendBtn" title="Kirim">
+    <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+  </button>
+</div>
+
+<div id="settingsOverlay"></div>
+<div id="settingsPanel">
+  <div class="settings-head">
+    <h2>Pengaturan</h2>
+    <button class="icon-btn" id="closeSettings">
+      <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="settings-body">
+    <div class="field">
+      <label>API Key OpenRouter <span style="color:#ef4444">*</span></label>
+      <input type="password" id="setApiKey" placeholder="sk-or-v1-...">
+      <div class="hint">Dapatkan di <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a></div>
+    </div>
+    <div class="field">
+      <label>Nama Model <span style="color:#ef4444">*</span></label>
+      <input type="text" id="setModel" placeholder="contoh: openai/gpt-4o-mini">
+      <div class="hint">Format: provider/model — daftar di <a href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a></div>
+    </div>
+    <div class="field">
+      <label>System Prompt</label>
+      <textarea id="setSystem" placeholder="Kamu adalah asisten AI yang ramah..."></textarea>
+    </div>
+    <div class="field">
+      <label>Temperature</label>
+      <div class="range-row">
+        <input type="range" id="setTemp" min="0" max="2" step="0.1" value="0.7">
+        <span class="range-val" id="tempVal">0.7</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Bahasa Suara</label>
+      <select id="setVoiceLang">
+        <option value="id-ID">Indonesia (id-ID)</option>
+        <option value="en-US">English US (en-US)</option>
+        <option value="en-GB">English UK (en-GB)</option>
+        <option value="ja-JP">日本語 (ja-JP)</option>
+        <option value="ko-KR">한국어 (ko-KR)</option>
+        <option value="zh-CN">中文 (zh-CN)</option>
+        <option value="ar-SA">العربية (ar-SA)</option>
+        <option value="es-ES">Español (es-ES)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="setAutoSpeak" style="width:auto;margin-right:6px;"> Bacakan balasan AI otomatis</label>
+    </div>
+    <button class="save-btn" id="saveSettings">Simpan Pengaturan</button>
+    <button class="danger-btn" id="clearChat">Hapus Riwayat Chat</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+//  KONFIGURASI DEFAULT — KOSONG, ISI LEWAT PANEL PENGATURAN
+// ============================================================
+const DEFAULT_API_KEY = "";
+const DEFAULT_MODEL   = "";
+const DEFAULT_SYSTEM  = "Kamu adalah asisten AI yang ramah, santai, dan membantu. Jawab dengan bahasa yang sama seperti user.";
+
+// ============================================================
+//  STATE
+// ============================================================
+const STORAGE_KEY = "chat_ai_state_v2";
+let state = {
+  apiKey: DEFAULT_API_KEY,
+  model: DEFAULT_MODEL,
+  system: DEFAULT_SYSTEM,
+  temperature: 0.7,
+  voiceLang: "id-ID",
+  autoSpeak: true,
+  history: []
+};
+
+let isGenerating = false;
+let currentUtterance = null;
+let recognition = null;
+let isRecording = false;
+
+const $ = id => document.getElementById(id);
+const chatEl = $("chat");
+const msgInput = $("msgInput");
+const headerModel = $("headerModel");
+
+// ============================================================
+//  LOAD / SAVE STATE
+// ============================================================
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      state = { ...state, ...saved };
+    }
+  } catch(e) { console.warn("Gagal load state", e); }
+}
+
+function saveState() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch(e) { console.warn("Gagal simpan state", e); }
+}
+
+// ============================================================
+//  RENDER CHAT
+// ============================================================
+function renderChat() {
+  chatEl.innerHTML = "";
+  state.history.forEach(msg => {
+    if (msg.role === "system") return;
+    appendMessageDOM(msg.role, msg.content, msg.reasoning || "", false);
+  });
+  scrollBottom();
+}
+
+function appendMessageDOM(role, content, reasoning, animate = true) {
+  const isUser = role === "user";
+  const wrap = document.createElement("div");
+  wrap.className = "msg " + (isUser ? "user" : "ai");
+
+  const av = document.createElement("div");
+  av.className = "avatar";
+  av.textContent = isUser ? "U" : "AI";
+  wrap.appendChild(av);
+
+  if (!isUser && reasoning && reasoning.trim()) {
+    const th = document.createElement("div");
+    th.className = "thought";
+    th.innerHTML = `
+      <div class="thought-head"><span class="arrow">▶</span> Thought</div>
+      <div class="thought-body"></div>`;
+    th.querySelector(".thought-body").textContent = reasoning;
+    th.querySelector(".thought-head").addEventListener("click", () => th.classList.toggle("open"));
+    wrap.appendChild(th);
+  }
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.textContent = content;
+  wrap.appendChild(bubble);
+
+  chatEl.appendChild(wrap);
+  if (animate) scrollBottom();
+  return bubble;
+}
+
+function scrollBottom() {
+  requestAnimationFrame(() => { chatEl.scrollTop = chatEl.scrollHeight; });
+}
+
+// ============================================================
+//  SPEECH SYNTHESIS
+// ============================================================
+function speak(text) {
+  if (!("speechSynthesis" in window)) return;
+  stopSpeak();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = state.voiceLang;
+  u.rate = 1.0;
+  u.pitch = 1.0;
+  currentUtterance = u;
+  $("stopVoiceBtn").style.display = "flex";
+  u.onend = u.onerror = () => {
+    currentUtterance = null;
+    $("stopVoiceBtn").style.display = "none";
+  };
+  window.speechSynthesis.speak(u);
+}
+
+function stopSpeak() {
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  currentUtterance = null;
+  $("stopVoiceBtn").style.display = "none";
+}
+
+// ============================================================
+//  API CALL (STREAMING)
+// ============================================================
+async function streamAI(messages, onChunk, onDone, onError) {
+  const url = "https://openrouter.ai/api/v1/chat/completions";
+  const body = {
+    model: state.model,
+    messages,
+    temperature: parseFloat(state.temperature) || 0.7,
+    stream: true
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + state.apiKey,
+        "HTTP-Referer": location.origin || "http://localhost",
+        "X-Title": "Chat AI"
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!res.ok) {
+      let errMsg = "";
+      try {
+        const errJson = await res.json();
+        errMsg = errJson?.error?.message || JSON.stringify(errJson);
+      } catch(e) {
+        errMsg = await res.text();
+      }
+      throw new Error("HTTP " + res.status + ": " + errMsg.slice(0, 300));
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let lines = buffer.split("\n");
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        const t = line.trim();
+        if (!t.startsWith("data:")) continue;
+        const data = t.slice(5).trim();
+        if (data === "[DONE]") { onDone(); return; }
+        try {
+          const json = JSON.parse(data);
+          const delta = json.choices?.[0]?.delta?.content;
+          const reason = json.choices?.[0]?.delta?.reasoning;
+          if (delta || reason) onChunk(delta || "", reason || "");
+        } catch(e) { /* skip */ }
+      }
+    }
+    onDone();
+  } catch (e) {
+    onError(e);
+  }
+}
+
+// ============================================================
+//  KIRIM PESAN
+// ============================================================
+async function sendMessage(userText) {
+  if (isGenerating) return;
+  userText = (userText || "").trim();
+  if (!userText) return;
+
+  // Validasi: API key & model harus diisi
+  if (!state.apiKey || !state.model) {
+    alert("API Key dan Nama Model belum diatur.\n\nSilakan buka Pengaturan (ikon ⚙️ di kanan atas) dan isi keduanya terlebih dahulu.");
+    openSettings();
+    return;
+  }
+
+  state.history.push({ role: "user", content: userText });
+  appendMessageDOM("user", userText);
+  saveState();
+  msgInput.value = "";
+  autoResize();
+
+  await generateReply();
+}
+
+async function generateReply() {
+  if (isGenerating) return;
+  isGenerating = true;
+
+  const wrap = document.createElement("div");
+  wrap.className = "msg ai";
+  const av = document.createElement("div");
+  av.className = "avatar"; av.textContent = "AI";
+  wrap.appendChild(av);
+
+  const thoughtEl = document.createElement("div");
+  thoughtEl.className = "thought";
+  thoughtEl.innerHTML = `
+    <div class="thought-head"><span class="arrow">▶</span> Thought</div>
+    <div class="thought-body"></div>`;
+  thoughtEl.querySelector(".thought-head").addEventListener("click", () => thoughtEl.classList.toggle("open"));
+  wrap.appendChild(thoughtEl);
+
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.innerHTML = `<div class="typing"><span></span><span></span><span></span></div>`;
+  wrap.appendChild(bubble);
+  chatEl.appendChild(wrap);
+  scrollBottom();
+
+  let fullText = "";
+  let fullReason = "";
+  let firstChunk = true;
+
+  const messages = [{ role: "system", content: state.system }];
+  state.history.forEach(m => messages.push({ role: m.role, content: m.content }));
+
+  await streamAI(
+    messages,
+    (delta, reason) => {
+      if (firstChunk && (delta || reason)) {
+        bubble.textContent = "";
+        firstChunk = false;
+      }
+      if (reason) {
+        fullReason += reason;
+        const tb = thoughtEl.querySelector(".thought-body");
+        tb.textContent = fullReason;
+      }
+      if (delta) {
+        fullText += delta;
+        bubble.textContent = fullText;
+        scrollBottom();
+      }
+    },
+    () => {
+      isGenerating = false;
+      if (!fullText) fullText = "(Tidak ada balasan)";
+      bubble.textContent = fullText;
+      state.history.push({ role: "assistant", content: fullText, reasoning: fullReason });
+      saveState();
+      scrollBottom();
+      if (state.autoSpeak) speak(fullText);
+    },
+    (err) => {
+      isGenerating = false;
+      bubble.textContent = "⚠️ Error: " + err.message;
+      bubble.style.color = "#fca5a5";
+      console.error(err);
+    }
+  );
+}
+
+// ============================================================
+//  REGENERATE / EDIT
+// ============================================================
+async function regenerate() {
+  if (isGenerating) return;
+  let lastUserIdx = -1;
+  for (let i = state.history.length - 1; i >= 0; i--) {
+    if (state.history[i].role === "user") { lastUserIdx = i; break; }
+  }
+  if (lastUserIdx === -1) { alert("Belum ada pesan user."); return; }
+  state.history = state.history.slice(0, lastUserIdx + 1);
+  saveState();
+  renderChat();
+  await generateReply();
+}
+
+function editLast() {
+  let lastUserIdx = -1;
+  for (let i = state.history.length - 1; i >= 0; i--) {
+    if (state.history[i].role === "user") { lastUserIdx = i; break; }
+  }
+  if (lastUserIdx === -1) { alert("Belum ada pesan user untuk diedit."); return; }
+  const current = state.history[lastUserIdx].content;
+  const edited = prompt("Edit pesan Anda:", current);
+  if (edited === null) return;
+  const trimmed = edited.trim();
+  if (!trimmed) return;
+  state.history = state.history.slice(0, lastUserIdx);
+  state.history.push({ role: "user", content: trimmed });
+  saveState();
+  renderChat();
+  generateReply();
+}
+
+// ============================================================
+//  SPEECH RECOGNITION
+// ============================================================
+function setupRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return null;
+  const r = new SR();
+  r.lang = "id-ID";
+  r.interimResults = true;
+  r.continuous = false;
+
+  let finalText = "";
+  r.onstart = () => { isRecording = true; $("micBtn").classList.add("rec"); finalText = msgInput.value; };
+  r.onresult = (e) => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalText += t + " ";
+      else interim += t;
+    }
+    msgInput.value = (finalText + interim).trim();
+    autoResize();
+  };
+  r.onend = () => { isRecording = false; $("micBtn").classList.remove("rec"); };
+  r.onerror = (e) => {
+    isRecording = false;
+    $("micBtn").classList.remove("rec");
+    console.warn("Speech error", e.error);
+  };
+  return r;
+}
+
+// ============================================================
+//  UI HELPERS
+// ============================================================
+function autoResize() {
+  msgInput.style.height = "auto";
+  msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + "px";
+}
+
+function openSettings() {
+  $("setApiKey").value = state.apiKey || "";
+  $("setModel").value = state.model || "";
+  $("setSystem").value = state.system || DEFAULT_SYSTEM;
+  $("setTemp").value = state.temperature;
+  $("tempVal").textContent = state.temperature;
+  $("setVoiceLang").value = state.voiceLang;
+  $("setAutoSpeak").checked = state.autoSpeak;
+  $("settingsOverlay").classList.add("show");
+  $("settingsPanel").classList.add("show");
+}
+function closeSettings() {
+  $("settingsOverlay").classList.remove("show");
+  $("settingsPanel").classList.remove("show");
+}
+
+// ============================================================
+//  EVENT LISTENERS
+// ============================================================
+$("settingsBtn").addEventListener("click", openSettings);
+$("closeSettings").addEventListener("click", closeSettings);
+$("settingsOverlay").addEventListener("click", closeSettings);
+
+$("setTemp").addEventListener("input", e => {
+  $("tempVal").textContent = e.target.value;
+});
+
+$("saveSettings").addEventListener("click", () => {
+  const k = $("setApiKey").value.trim();
+  const m = $("setModel").value.trim();
+
+  if (!k || !m) {
+    alert("API Key dan Nama Model wajib diisi!");
+    return;
+  }
+
+  state.apiKey = k;
+  state.model = m;
+  state.system = $("setSystem").value.trim() || DEFAULT_SYSTEM;
+  state.temperature = parseFloat($("setTemp").value) || 0.7;
+  state.voiceLang = $("setVoiceLang").value;
+  state.autoSpeak = $("setAutoSpeak").checked;
+  saveState();
+  headerModel.textContent = state.model;
+  closeSettings();
+  alert("Pengaturan berhasil disimpan!");
+});
+
+$("clearChat").addEventListener("click", () => {
+  if (!confirm("Hapus seluruh riwayat chat?")) return;
+  state.history = [];
+  saveState();
+  renderChat();
+  closeSettings();
+});
+
+$("refreshBtn").addEventListener("click", () => location.reload());
+$("regenBtn").addEventListener("click", regenerate);
+$("editBtn").addEventListener("click", editLast);
+$("stopVoiceBtn").addEventListener("click", stopSpeak);
+
+$("plusBtn").addEventListener("click", () => {
+  alert("Fitur lampiran belum tersedia.");
+});
+
+$("sendBtn").addEventListener("click", () => sendMessage(msgInput.value));
+
+msgInput.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage(msgInput.value);
+  }
+});
+msgInput.addEventListener("input", autoResize);
+
+$("micBtn").addEventListener("click", () => {
+  if (!recognition) {
+    alert("Browser Anda tidak mendukung speech-to-text (Web Speech API). Coba Chrome/Edge terbaru.");
+    return;
+  }
+  if (isRecording) {
+    recognition.stop();
+  } else {
+    recognition.lang = "id-ID";
+    try { recognition.start(); } catch(e) { console.warn(e); }
+  }
+});
+
+// ============================================================
+//  INIT
+// ============================================================
+function init() {
+  loadState();
+  headerModel.textContent = state.model || "Belum diatur";
+  recognition = setupRecognition();
+  renderChat();
+
+  // Kalau API key / model belum diisi → buka pengaturan otomatis
+  if (!state.apiKey || !state.model) {
+    setTimeout(() => {
+      alert("Selamat datang! 👋\n\nSebelum mulai chat, silakan isi:\n1. API Key OpenRouter\n2. Nama Model\n\nKeduanya bisa didapat dari openrouter.ai");
+      openSettings();
+    }, 400);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
